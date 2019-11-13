@@ -79,6 +79,7 @@ int main() {
     double v_ij;
 
     // Assemble the FD matrix (should work, validated with matlab)
+    // Might be done more efficiently though...
 	for(int i=0; i<N*N; i++) {
         for(int j=0; j<N*N; j++) {
             if (i==j)
