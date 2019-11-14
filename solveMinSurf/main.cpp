@@ -7,6 +7,12 @@
 #include "minSurf.h"
 
 
+// To do: Use Eigen-containers for the numerical important values, i.e. b,z,r,...
+// Whatever only needs to touch the inner nodes, maybe (and probably)
+//       there is a smart way to avoid allocating the full N*N
+// Returning the vector of the minSurfOperator does not really work
+// --> Switch to Eigen-containers!
+
 int main() {
     
     // Try to solve Poisson equation using Eigen
@@ -28,7 +34,8 @@ int main() {
         std::cout << "\t" << elem << std::endl;
     
     // Apply discrete minSurf on initial guess
-    std::valarray<double> rh = minSurfOperator(z, innerNodeList, N);
+    std::vector<double> rh = minSurfOperator(z, innerNodeList, N);
+    std::cout << "Differential is: " << std::endl;
     for(auto& elem: rh)
         std::cout << "\t" << elem << std::endl;
     

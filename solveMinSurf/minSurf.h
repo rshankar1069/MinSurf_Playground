@@ -9,6 +9,9 @@
 #include"Eigen/Eigen/SparseCholesky"
 
 
+#define EPS 1e-12
+
+
 template <typename T>
 T residual( const std::vector<T> &z, std::vector<T> &r ) {
     // computes residual entries in r[i]
@@ -157,101 +160,41 @@ std::vector<T> getInitGuess( std::vector<T> b, std::vector<int> bdryNodeList,
 }
 
 // ################################################################################################
-template <typename T>
-std::vector<T> getDxP( std::vector<T> z, std::vector<int> innerNodeList, const double h, 
-                       const int N ) {
-    std::vector<T> Dx(N*N);
-    
-    for(auto& i: innerNodeList) {
-        Dx[i] = (z[i+1] - z[i]) / (2*h);
-    }
-    
-    return Dx;
-}
-
-template <typename T>
-std::vector<T> getDxP( std::vector<T> z, std::vector<int> innerNodeList, const double h, 
-                       const int N, const int power ) {
-    std::vector<T> Dx(N*N);
-    
-    for(auto& i: innerNodeList) {
-        Dx[i] = pow((z[i+1] - z[i]) / (2*h), power);
-    }
-    
-    return Dx;
-}
-
-// Without power, i.e z_y
-template <typename T>
-std::valarray<T> getDyP( std::vector<T> z, std::vector<int> innerNodeList, const double h, 
-                         const int N ) {
-    std::valarray<T> Dy(N*N);
-    
-    for(auto& i: innerNodeList) {
-        Dy[i] = (z[i+N] - z[i-N]) / (2*h);
-    }
-    
-    return Dy;
-}
-
-// With power, i.e. useful for z_y^2
-template <typename T>
-std::valarray<T> getDyP( std::vector<T> z, std::vector<int> innerNodeList, const double h, 
-                         const int N, const int power ) {
-    std::valarray<T> Dy(N*N);
-    
-    for(auto& i: innerNodeList) {
-        Dy[i] = pow((z[i+N] - z[i-N]) / (2*h), power);
-    }
-    
-    return Dy;
-}
-
-template <typename T>
-std::valarray<T> getDxx( std::vector<T> z, std::vector<int> innerNodeList, const double h, 
-                         const int N ) {
-    std::valarray<T> Dxx(N*N);
-    
-    for(auto& i: innerNodeList) {
-        Dxx[i] = (z[i+1] - 2*z[i] + z[i]) / (h*h);
-    }
-    
-    return Dxx;
-    
-}
-
-template <typename T>
-std::valarray<T> getDyy( std::vector<T> z, std::vector<int> innerNodeList, const double h, 
-                         const int N ) {
-    std::valarray<T> Dyy(N*N);
-    
-    for(auto& i: innerNodeList) {
-        Dyy[i] = (z[i+N] - 2*z[i] + z[i-N]) / (h*h);
-    }
-    
-    return Dyy;
-    
-}
 
 
 // get differentials by FD
-//
-// Seriously need to rewrite this...
+// An idea might be to outsource the stencils to own functions, but I doubt it would 
+// increase readability and/or performance
 template <typename T> 
-std::valarray<T> minSurfOperator( std::vector<T> inVec, std::vector<int> innerNodeList, const int N ){ // I am really not married to the name of this function
-   std::valarray<T> outVec;
+std::vector<T> minSurfOperator( std::vector<T> inVec, std::vector<int> innerNodeList, const int N ){ // I am really not married to the name of this function
+   std::vector<T> outVec(N*N);
    const double h = 1./N;
+   double tmp = 0;
    
-   outVec = (1.+getDxP(inVec, innerNodeList, h, N, 2))*getDyy(inVec, innerNodeList, h, N) 
-          - 2.*getDxP(inVec, innerNodeList, h, N)*getDy(inVec, innerNodeList, h, N)*getDxDy(inVec, innerNodeList, h, N)
-          + (1+getDy2(inVec, innerNodeList, h, N, 2))*getDxx(inVec, innerNodeList, h, N);
-          
-    // If you don't want to use the valarrays to continue here, maybe convert/copy everything now
-    // But I think it makes sense to use them, since we can directly add/multiply vectors here.
-    // 2 points to check: -> Does the code above really do what we want (not sure about the (1+z_x^2)*z_yy in the vector mult. notation
-    //                    -> Do we maybe use Eigen-datatypes in general? these could add/substract/multiply aswell...
- 
-    return outVec;
+   for(auto& i: innerNodeList) {
+       for(auto& j: innerNodeList) {
+           // tmp = (1+z_x^2)*z_yy
+           tmp = (1 + pow((inVec[i+1+j*N] - inVec[i-1+j*N]) / (2*h), 2))
+                 * (inVec[i+1+j*N] -2*inVec[i  +j*N]+ inVec[i-1+j*N]) / (h*h);
+           // tmp -= 2*z_x*z_y*z_xy
+           tmp -= 2* (inVec[i+1+ j   *N] - inVec[i-1+ j   *N]) / (2*h) // z_x
+                   + (inVec[i  +(j+1)*N] - inVec[i  +(j-1)*N]) / (2*h) // z_y
+                   *   (inVec[i+1+(j+1)*N] + inVec[i-1+(j-1)*N]\
+                      - inVec[i+1+(j-1)*N] - inVec[i+1+(j+1)*N]) / (4*h); // z_xy
+           // tmp += (1+z_y^2)*z_xx
+           tmp += (1 + pow((inVec[i+(j+1)*N] - inVec[i+(j-1)*N]) / (2*h), 2))
+                 * (inVec[i+(j+1)*N] -2*inVec[i+j*N]+ inVec[i+(j-1)*N]) / (h*h);
+           std::cout << "tmp for " << i << ", " << j << " is " << tmp << std::endl;
+           if (tmp > EPS)
+               outVec[i+j*N] = tmp;
+           else
+               outVec[i+j*N] = 0;
+       }
+    }
+    
+    // Something does not work here
+   
+   return outVec;
 }
     
     
