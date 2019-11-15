@@ -65,8 +65,8 @@ void setInnerNodes( std::vector<int> &innerNodeList, const int N ) {
 }
 
 // Function to apply boundary conditions - needs to be extended -> Sankar
-template <typename T>
-void applyBC( const int BCtype, std::vector<T> &V , std::vector<int> bdryNodeList, 
+template <typename mType>
+void applyBC( const int BCtype, Eigen::MatrixBase<mType> &V , const std::vector<int> &bdryNodeList, 
             std::vector<int> innerNodeList ) {
     // Set boundary values
     for(auto& i: bdryNodeList)
@@ -77,11 +77,11 @@ void applyBC( const int BCtype, std::vector<T> &V , std::vector<int> bdryNodeLis
 }
 
 // ################################################################################################
-template <typename T>
-void buildPoissonMatrix( Eigen::SparseMatrix<T> &A, std::vector<int> bdryNodeList, 
-                         std::vector<int> innerNodeList, const int N ) {
+template <typename mType, typename dType>
+void buildPoissonMatrix( Eigen::SparseMatrix<dType> &A, const std::vector<int> &bdryNodeList, 
+                         const std::vector<int> &innerNodeList, const int N ) { 
 
-    typedef Eigen::Triplet<double> triplet;
+    typedef Eigen::Triplet<dType> triplet;
     std::vector<triplet> tripletList;
     tripletList.reserve(3*N);
 
@@ -127,36 +127,36 @@ void buildPoissonMatrix( Eigen::SparseMatrix<T> &A, std::vector<int> bdryNodeLis
     std::cout << A << std::endl;
 }
 
-template <typename T>
-std::vector<T> getInitGuess( std::vector<T> b, std::vector<int> bdryNodeList, 
-                   std::vector<int> innerNodeList, const int N ){
+template <typename mType, typename dType>
+void getInitGuess( Eigen::MatrixBase<mType> &zE, const Eigen::MatrixBase<mType> &bE, const std::vector<int> &bdryNodeList, 
+                   const std::vector<int> &innerNodeList, const int N ){
 
     // Preallocate Poisson-matrix 
-    Eigen::SparseMatrix<T> A(N*N, N*N);
+    Eigen::SparseMatrix<dType> A(N*N, N*N);
     
-    buildPoissonMatrix(A, bdryNodeList, innerNodeList, N);
+    buildPoissonMatrix<mType, dType>(A, bdryNodeList, innerNodeList, N);
     
     // To do: how to deal with float-z,b? Then this map does not work, is there a generic way?
     // probably need to use Eigen::Matrix<T, N*N, 1> or so
-    Eigen::Matrix<T, 1, 25> zE;
+//     Eigen::Matrix<T, 1, 25> zE;
 //     Eigen::VectorXd zE(N*N);
-    Eigen::VectorXd bE = Eigen::Map<Eigen::VectorXd>(b.data(), b.size());
+//     Eigen::VectorXd bE = Eigen::Map<Eigen::VectorXd>(b.data(), b.size());
 //     std::cout << bE << std::endl;
     
     // Now solve the Poisson equation using sparse Cholesky factorization
     // for later: solveWithGuess()
-    Eigen::SimplicialLDLT<Eigen::SparseMatrix<double> > solver;
+    Eigen::SimplicialLDLT<Eigen::SparseMatrix<dType> > solver;
     zE = solver.compute(A).solve(bE);
     
     std::cout << "Solution: " << std::endl;
     std::cout << zE << std::endl;
     
     // Copy zE back to z
-    std::vector<T> z(N*N);
-    for(int i=0; i<N*N; i++)
-        z[i] = zE[i]; // Not too happy with this ^^
+//     std::vector<T> z(N*N);
+//     for(int i=0; i<N*N; i++)
+//         z[i] = zE[i]; // Not too happy with this ^^
 //    
-    return z;
+//     return z;
 }
 
 // ################################################################################################
@@ -165,14 +165,19 @@ std::vector<T> getInitGuess( std::vector<T> b, std::vector<int> bdryNodeList,
 // get differentials by FD
 // An idea might be to outsource the stencils to own functions, but I doubt it would 
 // increase readability and/or performance
-template <typename T> 
-std::vector<T> minSurfOperator( std::vector<T> inVec, std::vector<int> innerNodeList, const int N ){ // I am really not married to the name of this function
-   std::vector<T> outVec(N*N);
-   const double h = 1./N;
-   double tmp = 0;
+template <typename mType, typename dType> 
+void minSurfOperator( Eigen::MatrixBase<mType> &outVec, const Eigen::MatrixBase<mType> &inVec, 
+                      std::vector<int> innerNodeList, const int N ){ // I am really not married to the name of this function
+//    std::vector<T> outVec(N*N);
+   const dType h = 1./N;
+   dType tmp = 0;
+   
+   
+   // Something does not work in the following loop...
    
    for(auto& i: innerNodeList) {
        for(auto& j: innerNodeList) {
+           std::cout << "\nheeelloooo\n";
            // tmp = (1+z_x^2)*z_yy
            tmp = (1 + pow((inVec[i+1+j*N] - inVec[i-1+j*N]) / (2*h), 2))
                  * (inVec[i+1+j*N] -2*inVec[i  +j*N]+ inVec[i-1+j*N]) / (h*h);
@@ -191,10 +196,9 @@ std::vector<T> minSurfOperator( std::vector<T> inVec, std::vector<int> innerNode
                outVec[i+j*N] = 0;
        }
     }
+
     
-    // Something does not work here
-   
-   return outVec;
+//    return outVec;
 }
     
     
