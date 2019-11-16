@@ -1,4 +1,4 @@
-/*
+/*  FYI, for now, I just compiled with g++ -std=c++14 -Wall
  *
  *
  *
@@ -20,32 +20,33 @@ int main() {
     const int N = 5; // 100 within 1sec for Poisson, but 500 intractable...
     typedef double dType;
     typedef Eigen::Matrix<dType, N*N, 1> Vector;
-    std::vector<int> bdryNodeList, innerNodeList;
+
+    // Set boundary and inner nodes (based on structure grid 
+    // and lexicographical ordering
+    typedef std::vector<int> listType;
+    listType bdryNodeList, innerNodeList;
     setBdryNodes(bdryNodeList, N);
     setInnerNodes(innerNodeList, N);
     
     
     
     // Prepare solution vector and RHS with BC
-//     std::vector<double> z(N*N), b(N*N);
-    Vector z, b;
-    applyBC(0, b, innerNodeList, bdryNodeList);
+    Vector z=Vector::Zero();
+    Vector b = Vector::Zero();
+    applyBC<Vector, dType, listType>(0, b, innerNodeList, bdryNodeList);
     
-    getInitGuess<Vector, dType>(z, b, bdryNodeList, innerNodeList, N);
+    getInitGuess<Vector, dType, listType>(z, b, bdryNodeList, innerNodeList, N);
    
-    std::cout << "Initial guess is: " << std::endl;
-//     for(auto& elem: z)
-//         std::cout << "\t" << elem << std::endl;
-    std::cout << z << std::endl;
+//     std::cout << "Initial guess is: " << std::endl;
+//     std::cout << z << std::endl;
     
     // Apply discrete minSurf on initial guess
-    Vector rh;
-    minSurfOperator<Vector, dType>(rh, z, innerNodeList, N);
-    std::cout << "Differential is: " << std::endl;
-//     for(auto& elem: rh)
-//         std::cout << "\t" << elem << std::endl;
-    std::cout << rh << std::endl;
-   
+    Vector rh = Vector::Zero();
+    minSurfOperator<Vector, dType, listType>(rh, z, innerNodeList, N);
+//     std::cout << "Differential is: " << std::endl;
+//     std::cout << rh << std::endl;
+    
+    
     // Run Newtons method
     //solve(...);
 }
