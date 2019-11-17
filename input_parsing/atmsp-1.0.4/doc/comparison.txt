@@ -1,0 +1,48 @@
+TEST-SYSTEM
+========================================================================
+Linux 64 bit Core2 Duo 2.4 GHz
+Kernel 2.6.37 + GCC 4.7.2
+Compiler switches: -O3 -ffast-math -flto -fwhole-program
+
+
+PARSERS COMPARED
+========================================================================
+MP = muParser 2.2.3
+FP = fParser 4.5.1
+ET = ExpressionTk 20130707
+AP = ATMSP 1.0.4
+
+
+BASIC INFORMATION     MP      FP     ET   AP
+========================================================================
+Code total (KB)      370     413    749   21
+Code lines (net)    6092  143526  16191  320  (Comments, blank lines removed)
+Executable (KB)      119     308   2000   28  (Dynamic executable stripped)
+Compile time (s)      16      27    187    2  (Dynamic executable)
+
+Notes: values rounded. Measured sizes contain the minimum to calculate
+a small expression for standard-type double without bells and whistles.
+
+
+AVAILABLE TYPES       MP    FP     ET     AP
+========================================================================
+int8                                x      x
+uint8                               x      x
+int16                  x            x      x
+uint16                 x            x      x
+int32                        x      x      x
+uint32                 x            x      x
+int64                  x            x      x
+uint64                 x            x      x
+int128                              x      x
+uint128                             x      x
+float                  x     x      x      x
+double                 x     x      x      x
+long double            x     x      x      x
+complex<float>               x      x      x
+complex<double>              x      x      x
+complex<long double>         x      x      x
+MPFR-float                   x      x      x
+
+Notes: for special types like GMP, MPFR, NTL, 128-bit, SSE2 or similar
+"special" types external libs needed to be linked.
