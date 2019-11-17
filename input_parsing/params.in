@@ -1,0 +1,19 @@
+# Mesh Parameters
+
+Nx 100
+Ny 100
+
+# Constants (apart from "pi", "e" and "i")
+
+# Variables (CASE SENSITIVE)
+
+NUM_VARS 2
+VAR0 x
+VAR1 y
+
+# Boundary Conditions
+
+BC.BOTTOM sin(x)
+BC.RIGHT sin(x)
+BC.TOP sin(x)
+BC.LEFT sin(x)
