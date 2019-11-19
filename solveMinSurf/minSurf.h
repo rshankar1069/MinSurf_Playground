@@ -153,7 +153,7 @@ void minSurfOperator( Eigen::MatrixBase<mType> &outVec, const Eigen::MatrixBase<
              * (inVec[i+N] -2*inVec[i]+ inVec[i-N]) / (h*h);
        // tmp -= 2*z_x*z_y*z_xy
        tmp -= 2* (inVec[i+1] - inVec[i-1]) / (2*h) // z_x
-               + (inVec[i+N] - inVec[i-N]) / (2*h) // z_y
+               * (inVec[i+N] - inVec[i-N]) / (2*h) // z_y
                *   (inVec[i+1+N] + inVec[i-1-N]
                   - inVec[i+1-N] - inVec[i-1+N]) / (4*h); // z_xy
        // tmp += (1+z_y^2)*z_xx
