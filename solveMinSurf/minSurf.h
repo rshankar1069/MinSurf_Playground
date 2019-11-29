@@ -149,10 +149,7 @@ std::vector<T> getInitGuess( std::vector<T> b, std::vector<int> bdryNodeList,
     std::cout << zE << std::endl;
     
     // Copy zE back to z
-    std::vector<T> z(N*N);
-    for(int i=0; i<N*N; i++)
-        z[i] = zE[i]; // Not too happy with this ^^
-//    
+    std::vector<T> z(zE);
     return z;
 }
 
