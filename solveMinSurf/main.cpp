@@ -17,7 +17,7 @@
 int main() {
     
     // Try to solve Poisson equation using Eigen
-    const int N = 70; // 100 within 1sec for Poisson, but 500 intractable...
+    const int N = 12; // 100 within 1sec for Poisson, but 500 intractable...
     typedef double dType;
     typedef Eigen::Matrix<dType, N*N, 1> Vector;
 
@@ -33,7 +33,7 @@ int main() {
     // Prepare solution vector and RHS with BC
     Vector z=Vector::Zero();
     Vector b = Vector::Zero();
-    applyBC<Vector, dType, listType>(0, b, innerNodeList, bdryNodeList);
+    applyBC<Vector, dType, listType>(0, b, innerNodeList, bdryNodeList, N);
     
     getInitGuess<Vector, dType, listType>(z, b, bdryNodeList, innerNodeList, N);
    
