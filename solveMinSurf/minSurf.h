@@ -7,19 +7,10 @@
 #include"Eigen/Eigen/Sparse"
 #include"Eigen/Eigen/Core"
 #include"Eigen/Eigen/SparseCholesky"
-
+#include"Eigen/Eigen/IterativeLinearSolvers"
 
 #define EPS 1.e-12
 
-
-template <typename T>
-T residual( const std::vector<T> &z, std::vector<T> &r ) {
-    // computes residual entries in r[i]
-    // returns sum of squares of r
-    T sum = 0;
-    for (auto& n : r)
-        sum += n*n;
-}
 
 // ################################################################################################
 // Boundary nodes by lexicographical ordering
@@ -78,7 +69,7 @@ void applyBC( const int BCtype, Eigen::MatrixBase<mType> &V , const listType &bd
             listType innerNodeList ) {
     // Set boundary values
     for(auto& i: bdryNodeList)
-        V[i]= 5;//sin( (dType)i );
+        V[i]= sin( (dType)i );
     // Set rest to zero
     for(auto& i: innerNodeList)
         V[i] = 0;
@@ -131,56 +122,221 @@ void getInitGuess( Eigen::MatrixBase<mType> &zE, const Eigen::MatrixBase<mType> 
 
 // ################################################################################################
 
+// Get d(in)/dx by central stencil
+template <typename mType, typename dType>
+inline dType getDx( const Eigen::MatrixBase<mType> &inVec, const dType h, const int index ) {
+    dType out = (inVec[index+1] - inVec[index-1]) / (2*h);
+    
+    return out;
+}
 
-// Get differentials by FD
-// An idea might be to outsource the stencils to own functions, but I doubt it would 
-// increase readability and/or performance
+// Get d(in)/dy by central stencil
+template <typename mType, typename dType>
+inline dType getDy( const Eigen::MatrixBase<mType> &inVec, const dType h, const int N, 
+                    const int index ) {
+    dType out = (inVec[index+N] - inVec[index-N]) / (2*h);
+    
+    return out;
+}
+
+// Get d^2(in)/dxx by central stencil
+template <typename mType, typename dType>
+inline dType getDxx( const Eigen::MatrixBase<mType> &inVec, const dType h, const int index ) {
+    dType out = (inVec[index+1] -2*inVec[index]+ inVec[index-1]) / (h*h);
+    
+    return out;
+}
+
+// Get d^2(in)/dyy by central stencil
+template <typename mType, typename dType>
+inline dType getDyy( const Eigen::MatrixBase<mType> &inVec, const dType h, const int N, 
+                     const int index ) {
+    dType out = (inVec[index+N] -2*inVec[index]+ inVec[index-N]) / (h*h);
+    
+    return out;
+}
+
+// Get mixed d^2(in)/dxy by central stencil
+template <typename mType, typename dType>
+inline dType getDxy( const Eigen::MatrixBase<mType> &inVec, const dType h, const int N, 
+                     const int index ) {
+    dType out = (inVec[index+1+N] + inVec[index-1-N] - inVec[index+1-N] - inVec[index-1+N]) / (4*h);
+
+    return out;
+}
+
+
+
+// Action of discrete minSurfOperator on an input vector
 template <typename mType, typename dType, typename listType> 
 void minSurfOperator( Eigen::MatrixBase<mType> &outVec, const Eigen::MatrixBase<mType> &inVec, 
-                      const listType innerNodeList, const int N ){ // I am really not married to the name of this function
+                      const listType innerNodeList, const int N ){
    const dType h = 1./N;
    dType tmp = 0;
-   
+
    // Maybe we can exploit Eigen a little bit more to make the index-accessing a little more
    // convenient or more efficient...
-   
+
    // Also, the result (if correct, but I think so...) is very sparse!
    // Does it maybe make sense to store it in terms of "duplets" -> tuple of (index, value)??
 
+   //~for(auto& i: innerNodeList) {
+       //~// tmp = (1+z_x^2)*z_yy
+       //~tmp = (1 + pow((inVec[i+1] - inVec[i-1]) / (2*h), 2))
+             //~* (inVec[i+N] -2*inVec[i]+ inVec[i-N]) / (h*h);
+       //~// tmp -= 2*z_x*z_y*z_xy
+       //~tmp -= 2* (inVec[i+1] - inVec[i-1]) / (2*h) // z_x
+               //~* (inVec[i+N] - inVec[i-N]) / (2*h) // z_y
+               //~*   (inVec[i+1+N] + inVec[i-1-N]
+                  //~- inVec[i+1-N] - inVec[i-1+N]) / (4*h); // z_xy
+       //~// tmp += (1+z_y^2)*z_xx
+       //~tmp += (1 + pow((inVec[i+N] - inVec[i-N]) / (2*h), 2))
+            //~* (inVec[i+1] -2*inVec[i]+ inVec[i-1]) / (h*h);
+       //~if (fabs(tmp) > EPS)
+           //~outVec[i] = tmp;
+       //~else
+           //~outVec[i] = 0.;
+    //~}
+
    for(auto& i: innerNodeList) {
        // tmp = (1+z_x^2)*z_yy
-       tmp = (1 + pow((inVec[i+1] - inVec[i-1]) / (2*h), 2))
-             * (inVec[i+N] -2*inVec[i]+ inVec[i-N]) / (h*h);
+       tmp = (1 + pow(getDx(inVec, h, i), 2))
+                    * getDyy(inVec, h, N, i);
        // tmp -= 2*z_x*z_y*z_xy
-       tmp -= 2* (inVec[i+1] - inVec[i-1]) / (2*h) // z_x
-               * (inVec[i+N] - inVec[i-N]) / (2*h) // z_y
-               *   (inVec[i+1+N] + inVec[i-1-N]
-                  - inVec[i+1-N] - inVec[i-1+N]) / (4*h); // z_xy
+       tmp -= 2*  getDx(inVec, h,    i) // z_x
+               *  getDy(inVec, h, N, i) // z_y
+               * getDxy(inVec, h, N, i); // z_xy
        // tmp += (1+z_y^2)*z_xx
-       tmp += (1 + pow((inVec[i+N] - inVec[i-N]) / (2*h), 2))
-            * (inVec[i+1] -2*inVec[i]+ inVec[i-1]) / (h*h);
+       tmp += (1 + pow(getDy(inVec, h, N, i), 2))
+                     * getDxx(inVec, h, i);
        if (fabs(tmp) > EPS)
            outVec[i] = tmp;
        else
            outVec[i] = 0.;
     }
-    
+
+
 }
+
+// Jacobian by hand
+template <typename mType, typename dType, typename listType> 
+void minSurfJacByHand( Eigen::SparseMatrix<dType> &Jacobian, const Eigen::MatrixBase<mType> &inVec, 
+                       const listType innerNodeList, const int N ) {
+    typedef Eigen::Triplet<dType> triplet;
+    std::vector<triplet> tripletList;
+    tripletList.reserve(7*N*N);
     
+    dType h = 1./N; // might make sense to store that "globally" 
+    // (like in a grid class, grid.h for instance. Then we could have more stuff, such as grid.nNodes, 
+    // grid.nInnerNodes, grid.innerNodeList etc, which would not be needed to always handed over)
+    // Fill Jacobian
+    dType dx, dy, dxx, dyy, dxy;
+    for(auto& i: innerNodeList) { // is innerNodeList really enough?
+        dx = getDx(inVec, h,    i);
+        dy = getDy(inVec, h, N, i);
+        dxx = getDxx(inVec, h,    i);
+        dyy = getDyy(inVec, h, N, i);
+        dxy = getDxy(inVec, h, N, i);
+        tripletList.push_back(triplet( i ,i,
+                                      -2/(h*h)*(1+pow(dx, 2))
+                                      -2/(h*h)*(1+pow(dy, 2))
+                                      ));
+        tripletList.push_back(triplet( i ,i+1, 
+                                       2/(2*h)*dx*dyy
+                                      +1/(h*h)*(1+pow(dy, 2))
+                                      -2*( 1/(2*h) + dy*dxy)
+                                      ));
+        tripletList.push_back(triplet( i ,i-1, 
+                                      -2/(2*h)*dx*dyy
+                                      +1/(h*h)*(1+pow(dy, 2))
+                                      -2*( 1/(2*h) - dy*dxy)
+                                      ));
+        tripletList.push_back(triplet( i, i+N,
+                                       1/(h*h)*(1+pow(dx, 2))
+                                      +2/(2*h)*dy
+                                      -2*(1/(2*h) + dx*dxy)
+                                      ));
+        tripletList.push_back(triplet( i, i-N,
+                                       1/(h*h)*(1+pow(dx, 2))
+                                      -2/(2*h)*dy
+                                      -2*(1/(2*h) - dx*dxy)
+                                      ));       // | I am not sure about this "-"
+        tripletList.push_back(triplet( i ,i+1+N,
+                                      -2/(4*h*h)*dx*dy
+                                      ));
+        tripletList.push_back(triplet( i ,i-1+N,
+                                      -2/(4*h*h)*dx*dy
+                                      ));
+        tripletList.push_back(triplet( i ,i+1-N,
+                                      -2/(4*h*h)*dx*dy
+                                      ));
+        tripletList.push_back(triplet( i ,i-1-N,
+                                      -2/(4*h*h)*dx*dy
+                                      ));
+    }
+    
+    // Build sparse matrix from triplets
+    Jacobian.setFromTriplets(tripletList.begin(), tripletList.end());
+}
+
+
     
 // ################################################################################################
-// implement (1+z_x^2)z_yy - ...
-/*
-template <typename T>
-void runNewton( std::vector<T> &old, std::vector<T> &fresh ) {
+// minSurf solving routine
 
-    intermediate = minSurfOperator(old); // == residual
-    if(intermediate.norm() < TOL) { 
-        compute " tangent \ intermediate " := delta;
-        fresh = old - delta; 
-    }
-    else
-        ABORT;
+// Get residual by application of minSurf-operator
+template <typename mType, typename dType, typename listType>
+dType residual( const Eigen::MatrixBase<mType> &solutionVector,
+                  Eigen::MatrixBase<mType> &resVec, const listType &innerNodeList, const int N ) {
+    // computes residual entries in resVec
+    // returns norm of r
     
+    // F^h(z^h) = r^h
+    minSurfOperator<mType, dType, listType>(resVec, solutionVector, innerNodeList, N);
+    
+    return resVec.norm();
 }
-*/
+
+
+// Main solver loop
+template<typename mType, typename dType, typename listType>
+void runSolver( const listType &innerNodeList, const listType &bdryNodeList, const int N) {
+    mType z = mType::Zero();
+    mType b = mType::Zero();
+    applyBC<mType, dType, listType>(0, b, innerNodeList, bdryNodeList);
+    
+    getInitGuess<mType, dType, listType>(z, b, bdryNodeList, innerNodeList, N);
+    
+    dType res;
+    mType resVec, dz; 
+    Eigen::SparseMatrix<dType> Jacobian(N*N, N*N);
+    
+    res = residual<mType, dType, listType>(z, resVec, innerNodeList, N);
+        
+    unsigned iterationIndex = 0;
+    // In case initiall guess was not horrifically lucky, run Newton-Raphson
+     while (res > 1.e-5 and iterationIndex < 20000) { 
+        
+        // get Jacobian
+        minSurfJacByHand(Jacobian, z, innerNodeList, N);
+        // Test for Eigenvalues of Jacobian - only test purpose, to know whether CG is a good idea or not
+        
+        // dz_n = grad[F(z_n)]^-1 * F(z_n)
+        // To be played with: preconditioner (MUST), 
+        // initial guess (maybe inversion of the Poisson-gradient might also help, but no idea), 
+        //     tolerance (MUST).. should not be too high, as our main goal is the result of Newton
+        Eigen::BiCGSTAB<Eigen::SparseMatrix<dType> > solver;
+        solver.compute(Jacobian);
+        dz = solver.solve(resVec);
+
+        // z_{n+1} = z_n - dz
+        z -= dz;        
+        // get residual and resVec -> F(z_n)
+        res = residual<mType, dType, listType>(z, resVec, innerNodeList, N);
+        
+        iterationIndex++;
+    }
+    std::cout << "Succeeded to converge after" << iterationIndex << "iterations with a residual of"
+              << res << "." << std::endl;
+    std::cout << resVec << std::endl;
+}

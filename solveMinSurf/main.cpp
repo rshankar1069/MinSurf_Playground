@@ -17,7 +17,7 @@
 int main() {
     
     // Try to solve Poisson equation using Eigen
-    const int N = 5; // 100 within 1sec for Poisson, but 500 intractable...
+    const int N = 70; // 100 within 1sec for Poisson, but 500 intractable...
     typedef double dType;
     typedef Eigen::Matrix<dType, N*N, 1> Vector;
 
@@ -45,8 +45,8 @@ int main() {
     minSurfOperator<Vector, dType, listType>(rh, z, innerNodeList, N);
 //     std::cout << "Differential is: " << std::endl;
 //     std::cout << rh << std::endl;
-    
-    
+
+ 
     // Run Newtons method
-    //solve(...);
+    runSolver<Vector, dType, listType>(innerNodeList, bdryNodeList, N);
 }
