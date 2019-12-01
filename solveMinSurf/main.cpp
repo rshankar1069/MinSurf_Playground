@@ -17,7 +17,7 @@
 int main() {
     
     // Try to solve Poisson equation using Eigen
-    const int N = 40; // 100 within 1sec for Poisson, but 500 intractable...
+    const int N = 10; // 100 within 1sec for Poisson, but 500 intractable...
     typedef double dType;
     typedef Eigen::Matrix<dType, N*N, 1> Vector;
 
@@ -31,18 +31,18 @@ int main() {
     
     
     // Prepare solution vector and RHS with BC
-    Vector z=Vector::Zero();
+    Vector z = Vector::Zero();
     Vector b = Vector::Zero();
     applyBC<Vector, dType, listType>(0, b, innerNodeList, bdryNodeList, N);
     
     getInitGuess<Vector, dType, listType>(z, b, bdryNodeList, innerNodeList, N);
    
-//     std::cout << "Initial guess is: " << std::endl;
-//     std::cout << z << std::endl;
+    std::cout << "Initial guess is: " << std::endl;
+    std::cout << z << std::endl;
     
     // Apply discrete minSurf on initial guess
     Vector rh = Vector::Zero();
-    minSurfOperator<Vector, dType, listType>(rh, z, innerNodeList, N);
+    minSurfOperator<Vector, dType, listType>(rh, b, innerNodeList, N);
 //     std::cout << "Differential is: " << std::endl;
 //     std::cout << rh << std::endl;
 

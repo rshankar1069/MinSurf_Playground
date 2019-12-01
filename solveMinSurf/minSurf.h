@@ -66,8 +66,8 @@ void setInnerNodes( listType &innerNodeList, const int N ) {
 
 // Function to apply boundary conditions - needs to be extended -> Sankar
 template <typename mType, typename dType, typename listType>
-void applyBC( const int BCtype, Eigen::MatrixBase<mType> &V , const listType &bdryNodeList, 
-            listType innerNodeList, const int N ) {
+void applyBC( const int BCtype, Eigen::MatrixBase<mType> &V , const listType &innerNodeList, 
+            listType bdryNodeList, const int N ) {
     // Set boundary values
     for(auto& i: bdryNodeList) { 
         dType x = ((dType) (i%N))/N;
@@ -85,7 +85,7 @@ void buildPoissonMatrix( Eigen::SparseMatrix<dType> &A, const listType &bdryNode
 
     typedef Eigen::Triplet<dType> triplet;
     std::vector<triplet> tripletList;
-    tripletList.reserve(3*N);
+    tripletList.reserve(5*N);
 
     // Assemble the FD matrix (should work, validated with matlab)
     // Set inner nodes - 5-pt stencil of FD (there should not be an issue with reaching 
@@ -94,8 +94,8 @@ void buildPoissonMatrix( Eigen::SparseMatrix<dType> &A, const listType &bdryNode
         tripletList.push_back(triplet(i ,i    , 4));
         tripletList.push_back(triplet(i ,i+1  ,-1));
         tripletList.push_back(triplet(i ,i-1  ,-1));
-        tripletList.push_back(triplet(i ,i+N-1,-1));
-        tripletList.push_back(triplet(i ,i-N+1,-1));
+        tripletList.push_back(triplet(i ,i+N  ,-1));
+        tripletList.push_back(triplet(i ,i-N  ,-1));
     }
 
 // Set a 1 where Dirichlet BC applies
@@ -229,11 +229,11 @@ void minSurfOperator( Eigen::MatrixBase<mType> &outVec, const Eigen::MatrixBase<
 
 // Jacobian by hand
 template <typename mType, typename dType, typename listType> 
-void minSurfJacByHand( Eigen::SparseMatrix<dType> &Jacobian, const Eigen::MatrixBase<mType> &inVec, 
+void minSurfJacByHand( Eigen::SparseMatrix<dType> &Jacobian, const Eigen::MatrixBase<mType> &inVec, const listType bdryNodeList, 
                        const listType innerNodeList, const int N ) {
     typedef Eigen::Triplet<dType> triplet;
     std::vector<triplet> tripletList;
-    tripletList.reserve(7*N*N);
+    tripletList.reserve(9*N*N);
     
     dType h = 1./ ((dType) N); // might make sense to store that "globally" 
     // (like in a grid class, grid.h for instance. Then we could have more stuff, such as grid.nNodes, 
@@ -247,7 +247,7 @@ void minSurfJacByHand( Eigen::SparseMatrix<dType> &Jacobian, const Eigen::Matrix
         dyy = getDyy(inVec, h, N, i);
         dxy = getDxy(inVec, h, N, i);
         tripletList.push_back(triplet( i ,i,
-                                      -2/(h*h)*(1+pow(dx, 2))
+                                      -2/(h*h)*(1+pow(dx, 2)) 
                                       -2/(h*h)*(1+pow(dy, 2))
                                       ));
         tripletList.push_back(triplet( i ,i+1, 
@@ -262,12 +262,12 @@ void minSurfJacByHand( Eigen::SparseMatrix<dType> &Jacobian, const Eigen::Matrix
                                       ));
         tripletList.push_back(triplet( i, i+N,
                                        1/(h*h)*(1+pow(dx, 2))
-                                      +2/(2*h)*dy
+                                      +2/(2*h)*dy*dxx
                                       -2*(1/(2*h) * dx*dxy)
                                       ));
         tripletList.push_back(triplet( i, i-N,
                                        1/(h*h)*(1+pow(dx, 2))
-                                      -2/(2*h)*dy
+                                      -2/(2*h)*dy*dxx
                                       +2*(1/(2*h) * dx*dxy)
                                       ));       // | I am not sure about this "-"
         tripletList.push_back(triplet( i ,i+1+N,
@@ -282,10 +282,14 @@ void minSurfJacByHand( Eigen::SparseMatrix<dType> &Jacobian, const Eigen::Matrix
         tripletList.push_back(triplet( i ,i-1-N,
                                       -2/(4*h*h)*dx*dy
                                       ));
+        // maybe not useful ...
+        /* for(auto& j: bdryNodeList)
+            tripletList.push_back(triplet(i, j, 0)); */
     }
     
     // Build sparse matrix from triplets
-    Jacobian.setFromTriplets(tripletList.begin(), tripletList.end());
+    Jacobian.setFromTriplets(tripletList.begin(), tripletList.end(),
+    [] (const dType &a, const dType &b) { return b; });
 }
 
 
@@ -331,7 +335,7 @@ void runSolver( const listType &innerNodeList, const listType &bdryNodeList, con
         
         // get Jacobian
         Jacobian.setZero();
-        minSurfJacByHand(Jacobian, z, innerNodeList, N);
+        minSurfJacByHand(Jacobian, z, bdryNodeList, innerNodeList, N);
         //~std::cout << Jacobian << std::endl;
         // Test for Eigenvalues of Jacobian - only test purpose, to know whether CG is a good idea or not
         
@@ -342,6 +346,9 @@ void runSolver( const listType &innerNodeList, const listType &bdryNodeList, con
         Eigen::BiCGSTAB<Eigen::SparseMatrix<dType> > solver;
         solver.compute(Jacobian);
         dz = solver.solve(resVec);
+
+        /* for(auto& i: bdryNodeList)
+            dz[i] = 0; */
 
         // z_{n+1} = z_n - dz
         z -= omega*dz;        
