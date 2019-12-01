@@ -5,6 +5,7 @@
 #include<cmath>
 #include<fstream>
 #include"Eigen/Eigen/Sparse"
+#include"Eigen/Eigen/Eigenvalues"
 #include"Eigen/Eigen/Core"
 #include"Eigen/Eigen/SparseCholesky"
 #include"Eigen/Eigen/IterativeLinearSolvers"
@@ -68,8 +69,10 @@ template <typename mType, typename dType, typename listType>
 void applyBC( const int BCtype, Eigen::MatrixBase<mType> &V , const listType &bdryNodeList, 
             listType innerNodeList, const int N ) {
     // Set boundary values
-    for(auto& i: bdryNodeList) 
-        V[i]= sin( (i%N)*M_PI/2 ) * cos(  (i/N)*M_PI/2 ); // sin(x*pi)sin(y*pi)
+    for(auto& i: bdryNodeList) { 
+        dType x = ((dType) (i%N))/N;
+        V[i]= pow( x,2); // sin(x*pi)sin(y*pi)
+    }
     // Set rest to zero
     for(auto& i: innerNodeList)
         V[i] = 0;
@@ -320,7 +323,8 @@ void runSolver( const listType &innerNodeList, const listType &bdryNodeList, con
     res = residual<mType, dType, listType>(z, resVec, innerNodeList, N);
     
     std::cout << "Starting residual: " << res << std::endl;
-    
+   
+    dType omega = .75; // Relaxation parameter for Newton-Raphson
     unsigned iterationIndex = 0;
     // In case initiall guess was not horrifically lucky, run Newton-Raphson
     do { 
@@ -328,6 +332,7 @@ void runSolver( const listType &innerNodeList, const listType &bdryNodeList, con
         // get Jacobian
         Jacobian.setZero();
         minSurfJacByHand(Jacobian, z, innerNodeList, N);
+        //~std::cout << Jacobian << std::endl;
         // Test for Eigenvalues of Jacobian - only test purpose, to know whether CG is a good idea or not
         
         // dz_n = grad[F(z_n)]^-1 * F(z_n)
@@ -339,14 +344,14 @@ void runSolver( const listType &innerNodeList, const listType &bdryNodeList, con
         dz = solver.solve(resVec);
 
         // z_{n+1} = z_n - dz
-        z -= dz;        
+        z -= omega*dz;        
         // get residual and resVec -> F(z_n)
         res = residual<mType, dType, listType>(z, resVec, innerNodeList, N);
         
         iterationIndex++;
         if( !(iterationIndex%100))
             std::cout << "\tAt iteration " << iterationIndex  << "res is " << res<< std::endl;
-    } while (res > 1.e-5 && iterationIndex < 20000);
+    } while (res > 1.e-5 && iterationIndex < 2000);
     std::cout << "Succeeded to converge after" << iterationIndex << "iterations with a residual of"
               << res << "." << std::endl;
     std::cout << z << std::endl;

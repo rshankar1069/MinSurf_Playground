@@ -17,7 +17,7 @@
 int main() {
     
     // Try to solve Poisson equation using Eigen
-    const int N = 12; // 100 within 1sec for Poisson, but 500 intractable...
+    const int N = 40; // 100 within 1sec for Poisson, but 500 intractable...
     typedef double dType;
     typedef Eigen::Matrix<dType, N*N, 1> Vector;
 
