@@ -7,13 +7,14 @@
 #include"Eigen/Eigen/Sparse"
 #include"Eigen/Eigen/Eigenvalues"
 #include"Eigen/Eigen/Core"
+#include"Eigen/Eigen/SparseLU"
 #include"Eigen/Eigen/SparseCholesky"
 #include"Eigen/Eigen/IterativeLinearSolvers"
 
 #define EPS 1.e-12
 
 
-// ################################################################################################
+// #################################################################################################
 // Boundary nodes by lexicographical ordering
 // To be extended for a) different boundaries
 //                    b) MPI?
@@ -66,22 +67,30 @@ void setInnerNodes( listType &innerNodeList, const int N ) {
 
 // Function to apply boundary conditions - needs to be extended -> Sankar
 template <typename mType, typename dType, typename listType>
-void applyBC( const int BCtype, Eigen::MatrixBase<mType> &V , const listType &bdryNodeList, 
-            listType innerNodeList, const int N ) {
+void applyBC( const int BCtype, Eigen::MatrixBase<mType> &V , const listType &innerNodeList, 
+            listType bdryNodeList, const int N ) {
     // Set boundary values
-    for(auto& i: bdryNodeList) { 
-        dType x = ((dType) (i%N))/N;
-        V[i]= pow( x,2); // sin(x*pi)sin(y*pi)
+    int i,j; dType x, y;
+    for(auto& node: bdryNodeList) {
+        i = node%N;
+        x = ((dType) i) / (N-1);
+        j = node/N;
+        y = ((dType) j) / (N-1);
+        
+        if( i==0 or i==(N-1)) // lower or upper bdry -> x^2
+            V[node] = pow(y-.5,2);
+        else if ( j==0 or j==(N-1)) // left or right bdry -> y^2
+            V[node] = pow(x-.5,2);
     }
-    // Set rest to zero
-    for(auto& i: innerNodeList)
-        V[i] = 0;
+    //~// Set rest to zero
+    //~for(auto& i: innerNodeList)
+        //~V[i] = 0;
 }
 
 // ################################################################################################
 template <typename mType, typename dType, typename listType>
-void buildPoissonMatrix( Eigen::SparseMatrix<dType> &A, const listType &bdryNodeList, 
-                         const listType &innerNodeList, const int N ) { 
+void buildPoissonMatrix( Eigen::SparseMatrix<dType> &A, const listType &innerNodeList, 
+                         const listType &bdryNodeList, const int N ) { 
 
     typedef Eigen::Triplet<dType> triplet;
     std::vector<triplet> tripletList;
@@ -91,30 +100,30 @@ void buildPoissonMatrix( Eigen::SparseMatrix<dType> &A, const listType &bdryNode
     // Set inner nodes - 5-pt stencil of FD (there should not be an issue with reaching 
     // the limits of the matrix...)
     for(auto& i: innerNodeList) {
-        tripletList.push_back(triplet(i ,i    , 4));
-        tripletList.push_back(triplet(i ,i+1  ,-1));
-        tripletList.push_back(triplet(i ,i-1  ,-1));
-        tripletList.push_back(triplet(i ,i+N-1,-1));
-        tripletList.push_back(triplet(i ,i-N+1,-1));
+        tripletList.push_back(triplet(i ,i   , 4));
+        tripletList.push_back(triplet(i ,i+1 ,-1));
+        tripletList.push_back(triplet(i ,i-1 ,-1));
+        tripletList.push_back(triplet(i ,i+N ,-1));
+        tripletList.push_back(triplet(i ,i-N ,-1));
     }
 
 // Set a 1 where Dirichlet BC applies
     for(auto& i: bdryNodeList)
-        tripletList.push_back(triplet(i, i,1));
+        tripletList.push_back(triplet(i, i, 1));
 
     // Build sparse A from triplets
     A.setFromTriplets(tripletList.begin(), tripletList.end());
-//     std::cout << A << std::endl;
+    //~std::cout << A << std::endl;
 }
 
 template <typename mType, typename dType, typename listType>
-void getInitGuess( Eigen::MatrixBase<mType> &zE, const Eigen::MatrixBase<mType> &bE, const listType &bdryNodeList, 
-                   const listType &innerNodeList, const int N ){
+void getInitGuess( Eigen::MatrixBase<mType> &zE, const Eigen::MatrixBase<mType> &bE, 
+                   const listType &innerNodeList, const listType &bdryNodeList, const int N ){
 
     // Preallocate Poisson-matrix 
     Eigen::SparseMatrix<dType> A(N*N, N*N);
     
-    buildPoissonMatrix<mType, dType, listType>(A, bdryNodeList, innerNodeList, N);
+    buildPoissonMatrix<mType, dType, listType>(A, innerNodeList, bdryNodeList, N);
         
     // Now solve the Poisson equation using sparse Cholesky factorization
     // for later: solveWithGuess()
@@ -174,14 +183,11 @@ inline dType getDxy( const Eigen::MatrixBase<mType> &inVec, const dType h, const
 // Action of discrete minSurfOperator on an input vector
 template <typename mType, typename dType, typename listType> 
 void minSurfOperator( Eigen::MatrixBase<mType> &outVec, const Eigen::MatrixBase<mType> &inVec, 
-                      const listType innerNodeList, const int N ){
+                      const listType innerNodeList, const listType bdryNodeList, const int N ){
    const dType h = 1./((dType) N);
    dType tmp = 0;
-
+   
    outVec.setZero();
-
-   // Maybe we can exploit Eigen a little bit more to make the index-accessing a little more
-   // convenient or more efficient...
 
    // Also, the result (if correct, but I think so...) is very sparse!
    // Does it maybe make sense to store it in terms of "duplets" -> tuple of (index, value)??
@@ -223,17 +229,19 @@ void minSurfOperator( Eigen::MatrixBase<mType> &outVec, const Eigen::MatrixBase<
            outVec[i] = 0.;
    }
 
-
+   //~for(auto& i: bdryNodeList) { // that was not very wise I guess..
+       //~outVec[i] = 1.;
+   //~}
 
 }
 
 // Jacobian by hand
 template <typename mType, typename dType, typename listType> 
-void minSurfJacByHand( Eigen::SparseMatrix<dType> &Jacobian, const Eigen::MatrixBase<mType> &inVec, 
-                       const listType innerNodeList, const int N ) {
+void minSurfJacByHand( Eigen::SparseMatrix<dType> &Jacobian, const Eigen::MatrixBase<mType> &inVec,
+                       const listType innerNodeList, const listType bdryNodeList, const int N ) {
     typedef Eigen::Triplet<dType> triplet;
     std::vector<triplet> tripletList;
-    tripletList.reserve(7*N*N);
+    tripletList.reserve(9*N*N);
     
     dType h = 1./ ((dType) N); // might make sense to store that "globally" 
     // (like in a grid class, grid.h for instance. Then we could have more stuff, such as grid.nNodes, 
@@ -247,63 +255,79 @@ void minSurfJacByHand( Eigen::SparseMatrix<dType> &Jacobian, const Eigen::Matrix
         dyy = getDyy(inVec, h, N, i);
         dxy = getDxy(inVec, h, N, i);
         tripletList.push_back(triplet( i ,i,
-                                      -2/(h*h)*(1+pow(dx, 2))
-                                      -2/(h*h)*(1+pow(dy, 2))
+                                      -2./(h*h)*(1+pow(dx, 2)) 
+                                      -2./(h*h)*(1+pow(dy, 2))
                                       ));
         tripletList.push_back(triplet( i ,i+1, 
-                                       2/(2*h)*dx*dyy
-                                      +1/(h*h)*(1+pow(dy, 2))
-                                      -2*( 1/(2*h) * dy*dxy)
+                                       2./(2*h)*dx*dyy
+                                      +1./(h*h)*(1+pow(dy, 2))
+                                      -2.*( 1/(2*h) * dy*dxy)
                                       ));
         tripletList.push_back(triplet( i ,i-1, 
-                                      -2/(2*h)*dx*dyy
-                                      +1/(h*h)*(1+pow(dy, 2))
-                                      +2*( 1/(2*h) * dy*dxy)
+                                      -2./(2*h)*dx*dyy
+                                      +1./(h*h)*(1+pow(dy, 2))
+                                      +2.*( 1/(2*h) * dy*dxy)
                                       ));
         tripletList.push_back(triplet( i, i+N,
-                                       1/(h*h)*(1+pow(dx, 2))
-                                      +2/(2*h)*dy
-                                      -2*(1/(2*h) * dx*dxy)
+                                       1./(h*h)*(1+pow(dx, 2))
+                                      +2./(2*h)*dy*dxx
+                                      -2.*(1/(2*h) * dx*dxy)
                                       ));
         tripletList.push_back(triplet( i, i-N,
-                                       1/(h*h)*(1+pow(dx, 2))
-                                      -2/(2*h)*dy
-                                      +2*(1/(2*h) * dx*dxy)
-                                      ));       // | I am not sure about this "-"
+                                       1./(h*h)*(1+pow(dx, 2))
+                                      -2./(2*h)*dy*dxx
+                                      +2.*(1/(2*h) * dx*dxy)
+                                      ));
         tripletList.push_back(triplet( i ,i+1+N,
-                                      -2/(4*h*h)*dx*dy
+                                      -2./(4*h*h)*dx*dy
                                       ));
         tripletList.push_back(triplet( i ,i-1+N,
                                        2/(4*h*h)*dx*dy
                                       ));
         tripletList.push_back(triplet( i ,i+1-N,
-                                       2/(4*h*h)*dx*dy
+                                       2./(4*h*h)*dx*dy
                                       ));
         tripletList.push_back(triplet( i ,i-1-N,
-                                      -2/(4*h*h)*dx*dy
+                                      -2./(4*h*h)*dx*dy
                                       ));
     }
     
+    
     // Build sparse matrix from triplets
-    Jacobian.setFromTriplets(tripletList.begin(), tripletList.end());
+    Jacobian.setFromTriplets(tripletList.begin(), tripletList.end(),
+    [] (const dType &a, const dType &b) { return b; }); // @Chenfei, I do not really get what this does ^^
 }
 
 
-    
-// ################################################################################################
+// #################################################################################################
 // minSurf solving routine
 
 // Get residual by application of minSurf-operator
 template <typename mType, typename dType, typename listType>
-dType residual( const Eigen::MatrixBase<mType> &solutionVector,
-                  Eigen::MatrixBase<mType> &resVec, const listType &innerNodeList, const int N ) {
+dType residual( Eigen::MatrixBase<mType> &resVec, const Eigen::MatrixBase<mType> &solVec, 
+                const listType &innerNodeList, const listType &bdryNodeList, const int N ) {
     // computes residual entries in resVec
     // returns norm of r
     
     // F^h(z^h) = r^h
-    minSurfOperator<mType, dType, listType>(resVec, solutionVector, innerNodeList, N);
+    // r^h contains the residual, which shall go to zero, in the innerNodeList, and 
+    // the boundary information on the bdryNodeList
+    resVec.setZero();
     
-    return resVec.norm();
+    minSurfOperator<mType, dType, listType>(resVec, solVec, innerNodeList, bdryNodeList, N);
+    //~std::cout << resVec << std::endl;     
+    
+    // maybe one could out-source this applyBC, since it is not touched again... 
+    // but then, no setting resVec to zero and careful with setZero in minSurfOperator
+    //~applyBC<mType, dType, listType>(0, resVec, innerNodeList, bdryNodeList, N); 
+    //~std::cout << resVec << std::endl;     
+    
+    
+    dType res = 0;
+    for(auto& i: innerNodeList)
+        res += pow(resVec[i], 2);
+
+    return sqrt(res);
 }
 
 
@@ -314,24 +338,27 @@ void runSolver( const listType &innerNodeList, const listType &bdryNodeList, con
     mType b = mType::Zero();
     applyBC<mType, dType, listType>(0, b, innerNodeList, bdryNodeList, N);
     
-    getInitGuess<mType, dType, listType>(z, b, bdryNodeList, innerNodeList, N);
+    getInitGuess<mType, dType, listType>(z, b, innerNodeList, bdryNodeList, N);
+    //~std::cout << z << std::endl;
+    applyBC<mType, dType, listType>(0, z, innerNodeList, bdryNodeList, N); 
+    //~std::cout << z << std::endl;
     
     dType res;
     mType resVec, dz; 
     Eigen::SparseMatrix<dType> Jacobian(N*N, N*N);
     
-    res = residual<mType, dType, listType>(z, resVec, innerNodeList, N);
-    
+    res = residual<mType, dType, listType>(resVec, z, innerNodeList, bdryNodeList, N);
+        
     std::cout << "Starting residual: " << res << std::endl;
    
-    dType omega = .75; // Relaxation parameter for Newton-Raphson
+    dType omega = 0.85; // Relaxation parameter for Newton-Raphson
     unsigned iterationIndex = 0;
     // In case initiall guess was not horrifically lucky, run Newton-Raphson
     do { 
         
         // get Jacobian
         Jacobian.setZero();
-        minSurfJacByHand(Jacobian, z, innerNodeList, N);
+        minSurfJacByHand(Jacobian, z, innerNodeList, bdryNodeList, N);
         //~std::cout << Jacobian << std::endl;
         // Test for Eigenvalues of Jacobian - only test purpose, to know whether CG is a good idea or not
         
@@ -341,18 +368,21 @@ void runSolver( const listType &innerNodeList, const listType &bdryNodeList, con
         //     tolerance (MUST).. should not be too high, as our main goal is the result of Newton
         Eigen::BiCGSTAB<Eigen::SparseMatrix<dType> > solver;
         solver.compute(Jacobian);
+        dz.setZero();
         dz = solver.solve(resVec);
-
+        //~std::cout << dz << std::endl;
         // z_{n+1} = z_n - dz
-        z -= omega*dz;        
+        z -= omega*dz;   
+        applyBC<mType, dType, listType>(0, z, innerNodeList, bdryNodeList, N); 
+    
         // get residual and resVec -> F(z_n)
-        res = residual<mType, dType, listType>(z, resVec, innerNodeList, N);
+        res = residual<mType, dType, listType>(resVec, z, innerNodeList, bdryNodeList, N);
         
         iterationIndex++;
         if( !(iterationIndex%100))
-            std::cout << "\tAt iteration " << iterationIndex  << "res is " << res<< std::endl;
-    } while (res > 1.e-5 && iterationIndex < 2000);
-    std::cout << "Succeeded to converge after" << iterationIndex << "iterations with a residual of"
+            std::cout << "\tAt iteration " << iterationIndex  << " res is " << res << std::endl;
+    } while (res > 1.e-6 && iterationIndex < 100);
+    std::cout << "Stopped after " << iterationIndex << " iterations with a residual of "
               << res << "." << std::endl;
     std::cout << z << std::endl;
 }
