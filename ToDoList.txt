@@ -1,0 +1,47 @@
+Todo-List
+
+-> something like a grid/mesh class, that inherits:
+    * number of nodes, mesh width (h), innerNodeList, boundaryNodeList (depending on boundaryType) etc.
+    * all functions related to that, including boundary conditions
+    * since that is maybe the only "class of operations", that needs input from the user, maybe 
+      have parsing done only in there
+      
+-> someting like a visualization class? does that make sense?
+
+-> should we make the main stuff (solveMinSurf or so) also built up like a class?
+
+-> My current idea of the structure of the code is thus: 
+    * one main function, that basically organizes the workflow between inputParsing, grid, solver, 
+                                                                                 and visualization
+    * grid.cpp, grid.h: class with all grid-related operations and infos
+    * solveMinSurf.cpp/.h: class with all solver-related operations and infos, including AD
+    * maybe have the input parsing and visualization stuff in the grid file?
+       (and then: should the solution vector be a member of grid?)
+    
+    * three CMake (or make) functionalities: make (to compile), 
+                                             make run (compile and run)
+                                             make test (compile and run all tests)
+    * Parallelization at some point (I would only do OpenMP, should be good enough, 
+                                    but that's kind of obligatory)
+                                            
+-> Therefore, I would identify the following tasks (with dependencies, cannot all be done in parallel): 
+    * Merge everything we have so far together and prepare the structure for the code (i.e. classes and everything)
+    * Maybe also already provide the grid class
+    * Then, 
+        # implement AD by dco (-> Chenfei)
+        # implement tests and play with the make test functionality (-> Praveen)
+        # design make-files (-> Praveen?)
+        # Connect input + solver + output (-> Sankar)
+        # Clean up code (all)
+
+-> Coarse timeline: 
+    * Until Christmas, it would be great to have something that produces a minimal surface
+    * End of January, the code should be totally done
+    
+    
+-> A short general guideline:
+    * try to name variable as others named them nearby (or change all, but consider the merge conflicts)
+    * commit your work as often as possible (but only when it makes sense, i.e. after every little milestone)
+    * merge to master once a "bigger" work-package is finished
+    * do not exceed 100 columns in width (i.e. break lines)
+    * do not merge code that does not work or if you do not understand how it works
