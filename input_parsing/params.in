@@ -4,16 +4,22 @@ Nx 100
 Ny 100
 
 # Constants (apart from "pi", "e" and "i")
+# Append '$' in the front of the constant to pass it to the expression parser
+
+NUM_CONSTS 1
+
+$OMEGA 1
 
 # Variables (CASE SENSITIVE)
 
-NUM_VARS 2
+NUM_VARS 1
+
 VAR0 x
-VAR1 y
 
 # Boundary Conditions
+# Use constants with '$' sign to pass the expression to the parser 
 
-BC.BOTTOM sin(x)
+BC.BOTTOM x^2+$OMEGA
 BC.RIGHT sin(x)
 BC.TOP sin(x)
 BC.LEFT sin(x)
