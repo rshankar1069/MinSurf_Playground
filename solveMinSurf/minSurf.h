@@ -94,7 +94,7 @@ void buildPoissonMatrix( Eigen::SparseMatrix<dType> &A, const listType &innerNod
 
     typedef Eigen::Triplet<dType> triplet;
     std::vector<triplet> tripletList;
-    tripletList.reserve(3*N);
+    tripletList.reserve(5*N);
 
     // Assemble the FD matrix (should work, validated with matlab)
     // Set inner nodes - 5-pt stencil of FD (there should not be an issue with reaching 
@@ -290,6 +290,9 @@ void minSurfJacByHand( Eigen::SparseMatrix<dType> &Jacobian, const Eigen::Matrix
         tripletList.push_back(triplet( i ,i-1-N,
                                       -2./(4*h*h)*dx*dy
                                       ));
+        // maybe not useful ...
+        /* for(auto& j: bdryNodeList)
+            tripletList.push_back(triplet(i, j, 0)); */
     }
     
     
