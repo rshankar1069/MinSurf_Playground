@@ -1,0 +1,90 @@
+... x in/output y output
+for(int i=0;i<100;++i)
+{
+
+	if(x[i] < 100)
+		y[i] = sin(x[i])
+	else  {
+		x[i] = 0.0;
+		y[i] = 3;
+	}
+
+	y[i] = sin(y[i]);	
+}
+
+adjoint section
+
+... x in/output y output
+for(int i=0;i<100;++i)
+{
+
+	if(x[i] < 100) {
+		push(1);
+		y[i] = sin(x[i])
+	}
+	else  {
+		push(2);
+		x[i] = 0.0;
+		push(y[i]);
+		y[i] *= sin(y[i]);
+
+		y[i] *= 3;
+	}
+
+	push(y[i]);
+	y[i] = sin(y[i]);	
+}
+
+for(int i=99;i>=0;--i)
+{
+
+y[i] = pop<double>();	//restore old value of y[i];
+a1_y[i] += cos(y[i]) * a1_y[i];
+
+int basic_block_idx = pop<int>();
+if(basic_block_idx==1) {
+	a1_x[i] += cos(x[i])*a1_y[i];
+}
+else if (basic_block_idx==2)
+{
+	a1_y[i] = 3*a1_y[i];
+
+	y[i] = pop<double>();
+	y_a1[i] += cos(y[i]) * y_a1[i];
+	a1_x[i] = 0.0;
+
+}
+
+}
+
+
+
+typedef dco::ga1s<double>::type ADJOINT_TYPE;
+
+std::vector<ADJOINT_TYPE> x(n);
+std::vector<ADJOINT_TYPE> y(n);
+
+ga1s<double>::global_tape->register_variable(x);
+f(x,y);
+
+dco::derivative(y) = 1.0;
+
+ga1s<double>::global_tape->interpret_adjoint();
+
+a1_x = dco::dervivative(x);
+
+
+////
+
+
+auto pos0 = ga1s<double>::global_tape->get_position();
+for(int i=0;i<ngridpoints;++i) {
+
+	auto pos0 = ga1s<double>::global_tape->register_variable(x1...x9);
+	y = f(x1..x9);
+	dco::dervivatitve(y)=1.0;
+	auto pos0 = ga1s<double>::global_tape->interpret_adjoint_to(pos0);
+	dx = dco::derivative(x1...x9);
+	auto pos0 = ga1s<double>::global_tape->reset_to(pos0);
+
+}
