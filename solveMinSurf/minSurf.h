@@ -65,19 +65,17 @@ void applyBC(const int BCtype, Eigen::MatrixBase<mType> &V, const listType &inne
              listType bdryNodeList, const int N)
 {
     // Set boundary values
-    int i, j;
-    dType x, y;
-    for (auto &node : bdryNodeList)
-    {
-        i = node % N;
-        x = ((dType)i) / (N - 1);
-        j = node / N;
-        y = ((dType)j) / (N - 1);
-
-        if (i == 0 or i == (N - 1)) // lower or upper bdry -> x^2
-            V[node] = pow(y - .5, 2);
-        else if (j == 0 or j == (N - 1)) // left or right bdry -> y^2
-            V[node] = pow(x - .5, 2);
+    int i,j; dType x, y;
+    for(auto& node: bdryNodeList) {
+        i = node%N;
+        x = ((dType) i) / (N-1);
+        j = node/N;
+        y = ((dType) j) / (N-1);
+        
+        if( i==0 or i==(N-1)) // lower or upper bdry -> x^2
+            V[node] = -.1*pow(y-.5,2);
+        else if ( j==0 or j==(N-1)) // left or right bdry -> y^2
+            V[node] = -.1*pow(x-.5,2);
     }
 }
 
