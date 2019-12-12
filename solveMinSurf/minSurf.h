@@ -4,6 +4,9 @@
 #include <valarray>
 #include <cmath>
 #include <fstream>
+#define DCO_AUTO_SUPPORT
+#define DCO_DISABLE_AVX2_WARNING
+#include <dco.hpp>
 #include "Eigen/Eigen/Sparse"
 #include "Eigen/Eigen/Eigenvalues"
 #include "Eigen/Eigen/Core"
@@ -126,6 +129,33 @@ void getInitGuess(Eigen::MatrixBase<mType> &zE, const Eigen::MatrixBase<mType> &
 // ################################################################################################
 
 // Action of discrete minSurfOperator on an input vector
+template <typename dType, typename listType>
+std::vector<dType> f(const std::vector<dType> &x, const listType innerNodeList, const int N)
+{
+    std::vector<dType> y(N*N);
+    const dType h = 1. / ((dType)N);
+    for (auto &i : innerNodeList)
+    {
+        // forward
+        // d(...) = fd(x)
+        dType dx = (x[i + 1] - x[i - 1]) / (2 * h);
+        dType dy = (x[i + N] - x[i - N]) / (2 * h);
+        dType dxx = (x[i + 1] - 2 * x[i] + x[i - 1]) / (h * h);
+        dType dyy = (x[i + N] - 2 * x[i] + x[i - N]) / (h * h);
+        dType dxy = (x[i + 1 + N] + x[i - 1 - N] - x[i + 1 - N] - x[i - 1 + N]) / (4 * h * h);
+
+        // v1 = (1+z_x^2)*z_yy
+        dType v1 = (1 + pow(dx, 2)) * dyy;
+        // v2 = -2*z_x*z_y*z_xy
+        dType v2 = -2 * dx * dy * dxy;
+        // v3 = (1+z_y^2)*z_xx
+        dType v3 = (1 + pow(dy, 2)) * dxx;
+
+        y[i] = v1 + v2 + v3;
+    }
+    return y;
+}
+
 template <typename mType, typename dType, typename listType>
 void minSurfOperator(Eigen::MatrixBase<mType> &y, const Eigen::MatrixBase<mType> &x, Eigen::SparseMatrix<dType> &Jacobian,
                      const listType innerNodeList, const int N)
@@ -211,6 +241,34 @@ void minSurfOperator(Eigen::MatrixBase<mType> &y, const Eigen::MatrixBase<mType>
     Jacobian.setFromTriplets(tripletList.begin(), tripletList.end());
 }
 
+template <typename dType, typename listType>
+void dydx_dcocpp(const std::vector<dType> &x_in, Eigen::SparseMatrix<dType> &Jacobian,
+                     const listType innerNodeList, const int N)
+{
+    const dType h = 1. / ((dType)N);
+
+    typedef Eigen::Triplet<dType> triplet;
+    std::vector<triplet> tripletList;
+    tripletList.reserve(9 * N * N);
+
+    typedef typename dco::gt1s<dType>::type ADtype;
+    std::vector<ADtype> x(x_in.begin(), x_in.end());
+
+    for (auto &i : innerNodeList)
+    {
+        dco::derivative(x[i]) = 1.0;
+        std::vector<ADtype> y = f(x, innerNodeList, N);
+        dco::derivative(x[i]) = 0.0;
+        std::vector<ADtype> grad = dco::derivative(y);
+        for (auto &j : innerNodeList)
+        {
+            if (grad[j] > EPS) { tripletList.push_back(triplet(i, j, grad[j])); }
+        }
+    }
+    // Build sparse matrix from triplets
+    Jacobian.setFromTriplets(tripletList.begin(), tripletList.end());
+}
+
 // #################################################################################################
 // minSurf solving routine
 
@@ -225,7 +283,15 @@ dType residual(Eigen::MatrixBase<mType> &resVec, const Eigen::MatrixBase<mType> 
     // F^h(z^h) = r^h
     // r^h contains the residual, which shall go to zero, in the innerNodeList, and
     // the boundary information on the bdryNodeList
-    minSurfOperator<mType, dType, listType>(resVec, solVec, Jacobian, innerNodeList, N);
+    // minSurfOperator<mType, dType, listType>(resVec, solVec, Jacobian, innerNodeList, N);
+
+    // TODO: solvec to solvec_vec
+    std::vector<dType> solVec_vec;
+    
+    std::vector<dType> resVec_vec = f<dType, listType>(solVec_vec, innerNodeList, N);
+    // TODO: resVec_vec to resVec
+
+    dydx_dcocpp<dType, listType>(solVec_vec, Jacobian, innerNodeList, N);
 
     // maybe one could out-source this applyBC, since it is not touched again...
     // but then, no setting resVec to zero and careful with setZero in minSurfOperator
